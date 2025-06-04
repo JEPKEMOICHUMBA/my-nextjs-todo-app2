@@ -51,6 +51,15 @@ mutation CreateProjectTask($args: CreateProjectTaskInput!) {
   }
 }
 
+mutation UpdateProject($args: UpdateProjectInput!) {
+  updateProject(args: $args) {
+    id
+    name
+    description
+    dateDue
+  }
+}
+
 mutation UpdateProjectTask($args: UpdateProjectTaskInput!) {
   updateProjectTask(args: $args) {
     id
@@ -78,5 +87,3 @@ mutation Login($email: String!, $password: String!) {
     message
   }
 }
-
-

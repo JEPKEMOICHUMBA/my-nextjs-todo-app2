@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useLoginMutation } from "@/lib/generated/graphql";
 import {
+  useLoginMutation,
   useRetrieveProjectsQuery,
   useRetrieveProjectTasksQuery,
   useCreateProjectMutation,
   useCreateProjectTaskMutation,
-  useDeleteProjectTaskMutation,
   useDeleteProjectMutation,
+  useUpdateProjectMutation,
 } from "@/lib/generated/graphql";
 
 // Define Zod schemas for validation
@@ -39,7 +39,7 @@ type TaskFormData = z.infer<typeof taskSchema>;
 
 interface Task {
   id: number;
-  text: string;
+  name: string;
   description: string;
   dateDue: string;
   completed: boolean;
@@ -57,12 +57,15 @@ export default function Todolist() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectIndex, setSelectedProjectIndex] = useState<number | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(null);
+  const [editProjectName, setEditProjectName] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
   const { data: projectsData, refetch: refetchProjects } = useRetrieveProjectsQuery();
   const { refetch: refetchTasks } = useRetrieveProjectTasksQuery({ skip: true });
   const [createProjectMutation] = useCreateProjectMutation();
   const [createTaskMutation] = useCreateProjectTaskMutation();
-  const [deleteTaskMutation] = useDeleteProjectTaskMutation();
   const [deleteProjectMutation] = useDeleteProjectMutation();
+  const [updateProjectMutation] = useUpdateProjectMutation();
   const [loginMutation] = useLoginMutation();
 
   const loginForm = useForm<LoginFormData>({
@@ -105,7 +108,7 @@ export default function Todolist() {
             tasks: Array.isArray(taskData?.retrieveProjectTasks)
               ? taskData.retrieveProjectTasks.map((task) => ({
                   id: task.id,
-                  text: task.name,
+                  name: task.name,
                   description: task.description,
                   dateDue: task.dateDue ?? "",
                   completed: !!task.dateCompleted,
@@ -118,6 +121,13 @@ export default function Todolist() {
     };
     fetchProjectsAndTasks();
   }, [projectsData, refetchTasks]);
+
+  useEffect(() => {
+    if (editingProjectIndex !== null) {
+      setEditProjectName(projects[editingProjectIndex].name);
+      editInputRef.current?.focus();
+    }
+  }, [editingProjectIndex]);
 
   const handleLogin = loginForm.handleSubmit(async (data) => {
     try {
@@ -132,6 +142,7 @@ export default function Todolist() {
       router.push("/");
     } catch (error) {
       console.error("Login failed:", error);
+      alert("Login failed. Please check your credentials.");
     }
   });
 
@@ -165,8 +176,8 @@ export default function Todolist() {
       });
       const newProjectId = response.data?.createProject?.id;
       if (newProjectId) {
-        setProjects([
-          ...projects,
+        setProjects((prev) => [
+          ...prev,
           { id: newProjectId, name: data.newProjectName, tasks: [], completed: false },
         ]);
       }
@@ -174,8 +185,60 @@ export default function Todolist() {
       projectForm.reset();
     } catch (error) {
       console.error("Error creating project:", error);
+      alert("Failed to create project.");
     }
   });
+
+  const editProject = (projectIndex: number) => {
+    setEditingProjectIndex(projectIndex);
+  };
+
+  const handleEditSubmit = async () => {
+    if (editingProjectIndex === null || !editProjectName.trim()) {
+      alert("Project name cannot be empty.");
+      return;
+    }
+
+    const project = projects[editingProjectIndex];
+    try {
+      const dueDate = new Date("2025-12-31T00:00:00.000Z");
+      const formattedDate = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}-${String(dueDate.getDate()).padStart(2, "0")} ${String(dueDate.getHours() + 3).padStart(
+        2,
+        "0"
+      )}:${String(dueDate.getMinutes()).padStart(2, "0")}:${String(
+        dueDate.getSeconds()
+      ).padStart(2, "0")}.000000 +0300`;
+
+      await updateProjectMutation({
+        variables: {
+          args: {
+            projectId: project.id,
+            name: editProjectName.trim(),
+            description: "Updated from frontend",
+            dateDue: formattedDate,
+          },
+        },
+      });
+
+      const updatedProjects = projects.map((p, index) =>
+        index === editingProjectIndex ? { ...p, name: editProjectName.trim() } : p
+      );
+      setProjects(updatedProjects);
+      await refetchProjects();
+      closeModal();
+    } catch (error) {
+      console.error("Error updating project:", error);
+      alert("Failed to update project.");
+    }
+  };
+
+  const closeModal = () => {
+    setEditingProjectIndex(null);
+    setEditProjectName("");
+  };
 
   const addTask = taskForm.handleSubmit(async (data) => {
     try {
@@ -207,6 +270,7 @@ export default function Todolist() {
       taskForm.reset();
     } catch (error) {
       console.error("Error creating task:", error);
+      alert("Failed to create task.");
     }
   });
 
@@ -231,6 +295,7 @@ export default function Todolist() {
       await refetchProjects();
     } catch (error) {
       console.error("Error deleting project:", error);
+      alert("Failed to delete project.");
     }
   };
 
@@ -264,7 +329,7 @@ export default function Todolist() {
                 {...loginForm.register("password")}
                 type="password"
                 placeholder="Enter your password"
-                className="w-full p-4 border border-yellow-200 rounded-xl outline-none focus:border-yellow-400 transition-colors placeholder-blue-900 text-blue-900"
+                className="w-full p-4 border bg-white rounded-xl border-yellow-200 outline-none focus:border-yellow-400 transition-colors placeholder-blue-900 text-blue-900"
               />
               {loginForm.formState.errors.password && (
                 <p className="text-red-500 text-sm mt-1">
@@ -312,9 +377,7 @@ export default function Todolist() {
               </p>
             ) : (
               projects.map((project, pIndex) => {
-                // Determine status
-                let dueDateStr = project.tasks[0]?.dateDue || "2100-01-01T00:00:00.000Z";
-                const dueDate = new Date(dueDateStr);
+                const dueDate = new Date(project.tasks[0]?.dateDue || "2100-01-01T00:00:00.000Z");
                 const now = new Date();
                 let status = "pending";
                 if (project.completed) {
@@ -325,7 +388,7 @@ export default function Todolist() {
 
                 return (
                   <div
-                    key={pIndex}
+                    key={project.id}
                     className="bg-yellow-100 rounded-xl p-4 shadow-sm cursor-pointer mb-2"
                     onClick={() => handleProjectClick(project.id)}
                   >
@@ -349,22 +412,31 @@ export default function Todolist() {
                         className="h-5 w-5 accent-green-600 border-yellow-200 rounded"
                       />
                       <h3
-                        className={`text-xl font-semibold ${
-                          project.completed ? "text-gray-400 line-through" : "text-black"
-                        }`}
+                        className={`text-xl font-semibold ${project.completed ? "text-gray-400 line-through" : "text-black"}`}
                       >
                         {project.name}
                       </h3>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteProject(pIndex);
-                      }}
-                      className="bg-red-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all"
-                    >
-                      Delete Project
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteProject(pIndex);
+                        }}
+                        className="bg-red-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all"
+                      >
+                        Delete Project
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          editProject(pIndex);
+                        }}
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 hover:scale-105 transition-all"
+                      >
+                        Edit Project
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -373,7 +445,7 @@ export default function Todolist() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 bg-white rounded-3xl shadow-md p-8 border border-yellow-100 transition-shadow hover:shadow-lg">
+        <main className="flex-1 bg-white rounded-3xl shadow-md p-8 border border-yellow-200 transition-shadow hover:shadow-lg">
           <h2 className="text-2xl font-bold text-blue-900 text-center mb-8">
             Add Projects & Tasks
           </h2>
@@ -481,6 +553,46 @@ export default function Todolist() {
           </div>
         </main>
       </div>
+
+      {/* Edit Project Modal */}
+      {editingProjectIndex !== null && (
+        <div className="fixed inset-0 bg-gradient-to-br from-yellow-100/70 via-orange-200/70 to-pink-300/70 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-yellow-200">
+            <h2 className="text-xl font-bold text-blue-900 mb-4">Edit Project</h2>
+            <input
+              type="text"
+              value={editProjectName}
+              onChange={(e) => setEditProjectName(e.target.value)}
+              placeholder="Project name"
+              className="w-full p-3 border border-yellow-200 rounded-xl outline-none focus:border-yellow-400 transition-colors placeholder-blue-900 text-gray-900 mb-4"
+              ref={editInputRef}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleEditSubmit();
+                if (e.key === "Escape") closeModal();
+              }}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={closeModal}
+                className="bg-gray-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-600 hover:scale-105 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleEditSubmit()}
+                disabled={!editProjectName.trim()}
+                className={`bg-blue-500 text-white px-4 py-2 rounded-lg border-none transition-all ${
+                  editProjectName.trim()
+                    ? "cursor-pointer hover:bg-blue-600 hover:scale-105"
+                    : "bg-gray-400 cursor-not-allowed"
+                }`}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
