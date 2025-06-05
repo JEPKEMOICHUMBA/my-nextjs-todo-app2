@@ -87,3 +87,11 @@ mutation Login($email: String!, $password: String!) {
     message
   }
 }
+
+mutation SetProjectStatus($projectId: Int!, $status: ProjectStatus!) {
+  setProjectStatus(projectId: $projectId, status: $status) {
+    id
+    name
+    status
+  }
+}

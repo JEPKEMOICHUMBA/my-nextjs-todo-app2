@@ -1177,6 +1177,14 @@ export type LoginMutationVariables = Exact<{
 
 export type LoginMutation = { __typename?: 'Mutation', login: { __typename?: 'LoginResult', jwtToken?: string | null, message?: string | null } };
 
+export type SetProjectStatusMutationVariables = Exact<{
+  projectId: Scalars['Int']['input'];
+  status: ProjectStatus;
+}>;
+
+
+export type SetProjectStatusMutation = { __typename?: 'Mutation', setProjectStatus: { __typename?: 'Project', id: number, name: string, status: ProjectStatus } };
+
 
 export const RetrieveProjectsDocument = gql`
     query RetrieveProjects {
@@ -1523,3 +1531,39 @@ export function useLoginMutation(baseOptions?: Apollo.MutationHookOptions<LoginM
 export type LoginMutationHookResult = ReturnType<typeof useLoginMutation>;
 export type LoginMutationResult = Apollo.MutationResult<LoginMutation>;
 export type LoginMutationOptions = Apollo.BaseMutationOptions<LoginMutation, LoginMutationVariables>;
+export const SetProjectStatusDocument = gql`
+    mutation SetProjectStatus($projectId: Int!, $status: ProjectStatus!) {
+  setProjectStatus(projectId: $projectId, status: $status) {
+    id
+    name
+    status
+  }
+}
+    `;
+export type SetProjectStatusMutationFn = Apollo.MutationFunction<SetProjectStatusMutation, SetProjectStatusMutationVariables>;
+
+/**
+ * __useSetProjectStatusMutation__
+ *
+ * To run a mutation, you first call `useSetProjectStatusMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useSetProjectStatusMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [setProjectStatusMutation, { data, loading, error }] = useSetProjectStatusMutation({
+ *   variables: {
+ *      projectId: // value for 'projectId'
+ *      status: // value for 'status'
+ *   },
+ * });
+ */
+export function useSetProjectStatusMutation(baseOptions?: Apollo.MutationHookOptions<SetProjectStatusMutation, SetProjectStatusMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<SetProjectStatusMutation, SetProjectStatusMutationVariables>(SetProjectStatusDocument, options);
+      }
+export type SetProjectStatusMutationHookResult = ReturnType<typeof useSetProjectStatusMutation>;
+export type SetProjectStatusMutationResult = Apollo.MutationResult<SetProjectStatusMutation>;
+export type SetProjectStatusMutationOptions = Apollo.BaseMutationOptions<SetProjectStatusMutation, SetProjectStatusMutationVariables>;

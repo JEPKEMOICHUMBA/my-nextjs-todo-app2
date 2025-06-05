@@ -13,6 +13,7 @@ import {
   useCreateProjectTaskMutation,
   useDeleteProjectMutation,
   useUpdateProjectMutation,
+  useSetProjectStatusMutation,
 } from "@/lib/generated/graphql";
 
 // Define Zod schemas for validation
@@ -66,6 +67,7 @@ export default function Todolist() {
   const [createTaskMutation] = useCreateProjectTaskMutation();
   const [deleteProjectMutation] = useDeleteProjectMutation();
   const [updateProjectMutation] = useUpdateProjectMutation();
+  const [setProjectStatusMutation] = useSetProjectStatusMutation();
   const [loginMutation] = useLoginMutation();
 
   const loginForm = useForm<LoginFormData>({
@@ -104,7 +106,7 @@ export default function Todolist() {
           updatedProjects.push({
             id: project.id,
             name: project.name,
-            completed: false,
+            completed: project.status === "COMPLETED",
             tasks: Array.isArray(taskData?.retrieveProjectTasks)
               ? taskData.retrieveProjectTasks.map((task) => ({
                   id: task.id,
@@ -274,11 +276,28 @@ export default function Todolist() {
     }
   });
 
-  const toggleProjectCompletion = (projectIndex: number) => {
-    const updatedProjects = projects.map((project, pIndex) =>
-      pIndex === projectIndex ? { ...project, completed: !project.completed } : project
-    );
-    setProjects(updatedProjects);
+  const toggleProjectCompletion = async (projectIndex: number) => {
+    const project = projects[projectIndex];
+    const newCompletedStatus = !project.completed;
+    const newStatus = newCompletedStatus ? "COMPLETED" : "PENDING";
+
+    try {
+      await setProjectStatusMutation({
+        variables: {
+          projectId: project.id,
+          status: newStatus,
+        },
+      });
+
+      const updatedProjects = projects.map((p, index) =>
+        index === projectIndex ? { ...p, completed: newCompletedStatus } : p
+      );
+      setProjects(updatedProjects);
+      await refetchProjects();
+    } catch (error) {
+      console.error("Error updating project status:", error);
+      alert("Failed to update project status.");
+    }
   };
 
   const deleteProject = async (projectIndex: number) => {
@@ -389,8 +408,7 @@ export default function Todolist() {
                 return (
                   <div
                     key={project.id}
-                    className="bg-yellow-100 rounded-xl p-4 shadow-sm cursor-pointer mb-2"
-                    onClick={() => handleProjectClick(project.id)}
+                    className="bg-yellow-100 rounded-xl p-4 shadow-sm mb-2"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       {status === "completed" && (
@@ -402,17 +420,27 @@ export default function Todolist() {
                       {status === "due" && (
                         <span className="px-3 py-1 rounded-full bg-red-500 text-white text-xs font-bold">Due</span>
                       )}
-                      <input
-                        type="checkbox"
-                        checked={project.completed}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          toggleProjectCompletion(pIndex);
-                        }}
-                        className="h-5 w-5 accent-green-600 border-yellow-200 rounded"
-                      />
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={project.completed}
+                          onChange={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleProjectCompletion(pIndex);
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          className="h-5 w-5 accent-green-600 border-yellow-200 rounded cursor-pointer"
+                        />
+                      </div>
                       <h3
-                        className={`text-xl font-semibold ${project.completed ? "text-gray-400 line-through" : "text-black"}`}
+                        className={`text-xl font-semibold cursor-pointer ${project.completed ? "text-gray-400 line-through" : "text-black"}`}
+                        onClick={() => handleProjectClick(project.id)}
                       >
                         {project.name}
                       </h3>
