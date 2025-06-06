@@ -46,7 +46,7 @@ export default function Login({ onLogin }: LoginProps) {
       <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
         <h2 className="text-xl font-semibold mb-4 text-gray-800">Login</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Current Time: Tuesday, May 27, 2025, 5:01 PM EAT
+          Current Timecyhtgfjy: Tuesday, May 27, 2025, 5:01 PM EAT
         </p>
         <form onSubmit={handleLogin}>
           <input
