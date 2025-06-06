@@ -27,7 +27,18 @@ const GET_PROJECT_TASKS = gql`
   }
 `;
 
-export default function ProjectTasks() {
+interface Task {
+  id: number;
+  name: string;
+  description: string;
+  dateDue: string;
+  dateCompleted?: string | null;
+  isLocal?: boolean;
+  project?: { id: number };
+  creator?: { id: number; email: string };
+}
+
+export default function EditProjectTasks() {
   const params = useParams();
   const router = useRouter();
   const projectIdRaw = params.projectId ?? params.id ?? "";
@@ -35,39 +46,40 @@ export default function ProjectTasks() {
 
   // Only allow positive integers
   const isValidProjectId = Number.isInteger(projectId) && projectId > 0;
-
   const isLoggedIn = typeof window !== "undefined" && localStorage.getItem("loggedIn") === "true";
+
+  // Move hooks to top level
+  const { data, refetch } = useQuery(GET_PROJECT_TASKS, {
+    variables: { projectId },
+    skip: !isValidProjectId || !isLoggedIn,
+  });
+  const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [deleteTaskMutation] = useDeleteProjectTaskMutation();
+
+  // Early returns after hooks
   if (!isLoggedIn) {
     router.push("/login");
     return null;
   }
   if (!isValidProjectId) {
-    return <div>Invalid project ID.</div>;
+    return <div className="text-red-500">Invalid project ID.</div>;
   }
 
-  const { data, loading, error, refetch } = useQuery(GET_PROJECT_TASKS, {
-    variables: { projectId },
-    skip: !isValidProjectId || !isLoggedIn,
-  });
-
-  const [localTasks, setLocalTasks] = useState<any[]>([]);
-  const [deleteTaskMutation] = useDeleteProjectTaskMutation();
-
   const handleAddTask = (task: { name: string; description: string; dueDate: string }) => {
-    const newTask = {
+    const newTask: Task = {
       id: Date.now(), // Fake ID for now
       name: task.name,
       description: task.description,
       dateDue: task.dueDate,
       isLocal: true, // Mark as local
     };
-    setLocalTasks(prev => [...prev, newTask]);
+    setLocalTasks((prev) => [...prev, newTask]);
   };
 
   // Delete handler for both backend and local tasks
-  const handleDeleteTask = async (task: any) => {
+  const handleDeleteTask = async (task: Task) => {
     if (task.isLocal) {
-      setLocalTasks(prev => prev.filter(t => t.id !== task.id));
+      setLocalTasks((prev) => prev.filter((t) => t.id !== task.id));
     } else {
       try {
         await deleteTaskMutation({ variables: { taskId: task.id } });
@@ -78,7 +90,7 @@ export default function ProjectTasks() {
     }
   };
 
-  const allTasks = [...(data?.retrieveProjectTasks || []), ...localTasks];
+  const allTasks: Task[] = [...(data?.retrieveProjectTasks || []), ...localTasks];
 
   return (
     <div className="container mx-auto p-4">
@@ -87,7 +99,7 @@ export default function ProjectTasks() {
       <TaskForm onAddTask={handleAddTask} />
 
       <ul className="space-y-2 mt-6">
-        {allTasks.map((task: any) => (
+        {allTasks.map((task) => (
           <li
             key={task.id}
             className="p-4 bg-gray-100 rounded text-gray-900 flex items-center justify-between"
