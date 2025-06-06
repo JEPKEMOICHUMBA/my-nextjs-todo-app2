@@ -1,118 +1,123 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, gql } from "@apollo/client";
-import { useForm } from "react-hook-form";
-import { useEffect } from "react";
+import { useQuery } from "@apollo/client";
+import { gql } from "@apollo/client";
+import TaskForm from "@/components/TaskForm";
+import { useState } from "react";
+import { useDeleteProjectTaskMutation } from "@/lib/generated/graphql";
 
-const GET_PROJECT = gql`
-  query GetProject($projectId: Int!) {
-    project: retrieveProject(projectId: $projectId) {
+// GraphQL query to retrieve tasks for a specific project
+const GET_PROJECT_TASKS = gql`
+  query GetProjectTasks($projectId: Int!) {
+    retrieveProjectTasks(projectId: $projectId) {
       id
       name
       description
       dateDue
+      dateCompleted
+      project {
+        id
+      }
+      creator {
+        id
+        email
+      }
     }
   }
 `;
 
-const UPDATE_PROJECT = gql`
-  mutation UpdateProject($args: UpdateProjectInput!) {
-    updateProject(args: $args) {
-      id
-      name
-      description
-      dateDue
-    }
-  }
-`;
+interface Task {
+  id: number;
+  name: string;
+  description: string;
+  dateDue: string;
+  dateCompleted?: string | null;
+  isLocal?: boolean;
+  project?: { id: number };
+  creator?: { id: number; email: string };
+}
 
-export default function EditProjectPage() {
+export default function EditProjectTasks() {
   const params = useParams();
   const router = useRouter();
-  const projectId = params.projectId ? parseInt(params.projectId as string) : 0;
+  const projectIdRaw = params.projectId ?? params.id ?? "";
+  const projectId = Number(projectIdRaw);
 
-  const { data, loading, error } = useQuery(GET_PROJECT, {
+  // Only allow positive integers
+  const isValidProjectId = Number.isInteger(projectId) && projectId > 0;
+  const isLoggedIn = typeof window !== "undefined" && localStorage.getItem("loggedIn") === "true";
+
+  // Move hooks to top level
+  const { data, refetch } = useQuery(GET_PROJECT_TASKS, {
     variables: { projectId },
-    skip: !projectId,
+    skip: !isValidProjectId || !isLoggedIn,
   });
+  const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [deleteTaskMutation] = useDeleteProjectTaskMutation();
 
-  const [updateProject, { loading: updating }] = useMutation(UPDATE_PROJECT);
+  // Early returns after hooks
+  if (!isLoggedIn) {
+    router.push("/login");
+    return null;
+  }
+  if (!isValidProjectId) {
+    return <div className="text-red-500">Invalid project ID.</div>;
+  }
 
-  const { register, handleSubmit, reset } = useForm({
-    defaultValues: {
-      name: "",
-      description: "",
-      dateDue: "",
-    },
-  });
+  const handleAddTask = (task: { name: string; description: string; dueDate: string }) => {
+    const newTask: Task = {
+      id: Date.now(), // Fake ID for now
+      name: task.name,
+      description: task.description,
+      dateDue: task.dueDate,
+      isLocal: true, // Mark as local
+    };
+    setLocalTasks((prev) => [...prev, newTask]);
+  };
 
-  useEffect(() => {
-    if (data?.project) {
-      reset({
-        name: data.project.name || "",
-        description: data.project.description || "",
-        dateDue: data.project.dateDue ? data.project.dateDue.slice(0, 16) : "",
-      });
-    }
-  }, [data, reset]);
-
-  const onSubmit = async (formData: any) => {
-    try {
-      await updateProject({
-        variables: {
-          args: {
-            id: projectId,
-            name: formData.name,
-            description: formData.description,
-            dateDue: formData.dateDue,
-          },
-        },
-      });
-      router.push(`/${projectId}`);
-    } catch (err) {
-      alert("Failed to update project.");
+  // Delete handler for both backend and local tasks
+  const handleDeleteTask = async (task: Task) => {
+    if (task.isLocal) {
+      setLocalTasks((prev) => prev.filter((t) => t.id !== task.id));
+    } else {
+      try {
+        await deleteTaskMutation({ variables: { taskId: task.id } });
+        refetch();
+      } catch (error) {
+        console.error("Error deleting task:", error);
+      }
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error loading project.</div>;
+  const allTasks: Task[] = [...(data?.retrieveProjectTasks || []), ...localTasks];
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Edit Project</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-md">
-        <div>
-          <label className="block mb-1 font-medium">Name</label>
-          <input
-            {...register("name", { required: true })}
-            className="w-full p-2 border rounded"
-            type="text"
-          />
-        </div>
-        <div>
-          <label className="block mb-1 font-medium">Description</label>
-          <textarea
-            {...register("description")}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div>
-          <label className="block mb-1 font-medium">Due Date</label>
-          <input
-            {...register("dateDue")}
-            className="w-full p-2 border rounded"
-            type="datetime-local"
-          />
-        </div>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-blue-600 text-white rounded"
-          disabled={updating}
-        >
-          {updating ? "Updating..." : "Update Project"}
-        </button>
-      </form>
+      <h1 className="text-2xl font-bold mb-4">Tasks for Project {projectId}</h1>
+
+      <TaskForm onAddTask={handleAddTask} />
+
+      <ul className="space-y-2 mt-6">
+        {allTasks.map((task) => (
+          <li
+            key={task.id}
+            className="p-4 bg-gray-100 rounded text-gray-900 flex items-center justify-between"
+          >
+            <div>
+              <h2 className="text-lg font-semibold">{task.name}</h2>
+              <p>{task.description}</p>
+              <p>Due: {task.dateDue}</p>
+            </div>
+            <button
+              onClick={() => handleDeleteTask(task)}
+              className="ml-4 bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

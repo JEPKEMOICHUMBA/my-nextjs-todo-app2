@@ -11,7 +11,6 @@ import {
   useRetrieveProjectTasksQuery,
   useCreateProjectMutation,
   useCreateProjectTaskMutation,
-  useDeleteProjectTaskMutation,
   useDeleteProjectMutation,
 } from "@/lib/generated/graphql";
 
@@ -61,7 +60,6 @@ export default function Todolist() {
   const { refetch: refetchTasks } = useRetrieveProjectTasksQuery({ skip: true });
   const [createProjectMutation] = useCreateProjectMutation();
   const [createTaskMutation] = useCreateProjectTaskMutation();
-  const [deleteTaskMutation] = useDeleteProjectTaskMutation();
   const [deleteProjectMutation] = useDeleteProjectMutation();
   const [loginMutation] = useLoginMutation();
 
@@ -312,8 +310,7 @@ export default function Todolist() {
               </p>
             ) : (
               projects.map((project, pIndex) => {
-                // Determine status
-                let dueDateStr = project.tasks[0]?.dateDue || "2100-01-01T00:00:00.000Z";
+                const dueDateStr = project.tasks[0]?.dateDue || "2100-01-01T00:00:00.000Z";
                 const dueDate = new Date(dueDateStr);
                 const now = new Date();
                 let status = "pending";
