@@ -60,6 +60,7 @@ export default function Todolist() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(null);
   const [editProjectName, setEditProjectName] = useState("");
+  const [deletingProjectIndex, setDeletingProjectIndex] = useState<number | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const { data: projectsData, refetch: refetchProjects } = useRetrieveProjectsQuery();
   const { refetch: refetchTasks } = useRetrieveProjectTasksQuery({ skip: true });
@@ -230,16 +231,45 @@ export default function Todolist() {
       );
       setProjects(updatedProjects);
       await refetchProjects();
-      closeModal();
+      closeEditModal();
     } catch (error) {
       console.error("Error updating project:", error);
       alert("Failed to update project.");
     }
   };
 
-  const closeModal = () => {
+  const closeEditModal = () => {
     setEditingProjectIndex(null);
     setEditProjectName("");
+  };
+
+  const showDeleteConfirmation = (projectIndex: number) => {
+    setDeletingProjectIndex(projectIndex);
+  };
+
+  const closeDeleteConfirmation = () => {
+    setDeletingProjectIndex(null);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (deletingProjectIndex === null) return;
+
+    try {
+      const projectId = projects[deletingProjectIndex].id;
+      await deleteProjectMutation({
+        variables: { projectId },
+      });
+      const updatedProjects = projects.filter((_, pIndex) => pIndex !== deletingProjectIndex);
+      setProjects(updatedProjects);
+      if (selectedProjectIndex === deletingProjectIndex) {
+        setSelectedProjectIndex(null);
+      }
+      await refetchProjects();
+      closeDeleteConfirmation();
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      alert("Failed to delete project.");
+    }
   };
 
   const addTask = taskForm.handleSubmit(async (data) => {
@@ -297,24 +327,6 @@ export default function Todolist() {
     } catch (error) {
       console.error("Error updating project status:", error);
       alert("Failed to update project status.");
-    }
-  };
-
-  const deleteProject = async (projectIndex: number) => {
-    try {
-      const projectId = projects[projectIndex].id;
-      await deleteProjectMutation({
-        variables: { projectId },
-      });
-      const updatedProjects = projects.filter((_, pIndex) => pIndex !== projectIndex);
-      setProjects(updatedProjects);
-      if (selectedProjectIndex === projectIndex) {
-        setSelectedProjectIndex(null);
-      }
-      await refetchProjects();
-    } catch (error) {
-      console.error("Error deleting project:", error);
-      alert("Failed to delete project.");
     }
   };
 
@@ -449,7 +461,7 @@ export default function Todolist() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteProject(pIndex);
+                          showDeleteConfirmation(pIndex);
                         }}
                         className="bg-red-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all"
                       >
@@ -596,12 +608,12 @@ export default function Todolist() {
               ref={editInputRef}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleEditSubmit();
-                if (e.key === "Escape") closeModal();
+                if (e.key === "Escape") closeEditModal();
               }}
             />
             <div className="flex gap-2 justify-end">
               <button
-                onClick={closeModal}
+                onClick={closeEditModal}
                 className="bg-gray-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-600 hover:scale-105 transition-all"
               >
                 Cancel
@@ -616,6 +628,33 @@ export default function Todolist() {
                 }`}
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingProjectIndex !== null && (
+        <div className="fixed inset-0 bg-gradient-to-br from-yellow-100/70 via-orange-200/70 to-pink-300/70 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-yellow-200">
+            <h2 className="text-xl font-bold text-red-600 mb-4">Confirm Delete</h2>
+            <p className="text-gray-700 mb-6">
+              Are you sure you want to delete the project "{projects[deletingProjectIndex]?.name}"? 
+              This action cannot be undone and will also delete all tasks associated with this project.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={closeDeleteConfirmation}
+                className="bg-gray-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-600 hover:scale-105 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProject}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-600 hover:scale-105 transition-all"
+              >
+                Delete Project
               </button>
             </div>
           </div>

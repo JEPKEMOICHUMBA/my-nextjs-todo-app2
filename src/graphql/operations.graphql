@@ -95,3 +95,4 @@ mutation SetProjectStatus($projectId: Int!, $status: ProjectStatus!) {
     status
   }
 }
+
